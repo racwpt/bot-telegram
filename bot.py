@@ -1,17 +1,17 @@
-import os
 import sqlite3
+import os
 from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
 
 TOKEN = os.environ.get("TOKEN")
-DATABASE_URL = os.environ.get("DATABASE_URL")
 
+# DATABASE SQLITE
 conn = sqlite3.connect("pelanggan.db", check_same_thread=False)
 cursor = conn.cursor()
 
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS pelanggan (
-    id SERIAL PRIMARY KEY,
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
     nama TEXT,
     id_pelanggan TEXT,
     sn_modem TEXT
@@ -19,35 +19,51 @@ CREATE TABLE IF NOT EXISTS pelanggan (
 """)
 conn.commit()
 
+# STATE USER
 user_state = {}
 
-menu = [["➕ Tambah Data", "🔍 Cek Pelanggan"], ["📋 List Data"]]
+# MENU BUTTON
+menu = [
+    ["➕ Tambah Data"],
+    ["📋 Data Pelanggan"],
+    ["🔍 Cek Pelanggan"]
+]
 
+# START
 def start(update: Update, context: CallbackContext):
     update.message.reply_text(
-        "👋 Selamat datang di BOT Monitoring Pelanggan",
+        "📡 BOT MONITORING PELANGGAN\n\nSilakan pilih menu:",
         reply_markup=ReplyKeyboardMarkup(menu, resize_keyboard=True)
     )
 
+# HANDLE MENU
 def handle_menu(update: Update, context: CallbackContext):
-    user_id = update.message.from_user.id
     text = update.message.text
+    user_id = update.message.from_user.id
 
     if text == "➕ Tambah Data":
         user_state[user_id] = "nama"
         update.message.reply_text("Masukkan Nama Pelanggan:")
 
+    elif text == "📋 Data Pelanggan":
+        cursor.execute("SELECT nama, id_pelanggan, sn_modem FROM pelanggan")
+        data = cursor.fetchall()
+
+        if not data:
+            update.message.reply_text("❌ Data masih kosong")
+            return
+
+        hasil = "📋 DATA PELANGGAN:\n\n"
+        for d in data:
+            hasil += f"👤 Nama: {d[0]}\n🆔 ID: {d[1]}\n📡 SN: {d[2]}\n\n"
+
+        update.message.reply_text(hasil)
+
     elif text == "🔍 Cek Pelanggan":
         user_state[user_id] = "cek"
         update.message.reply_text("Masukkan ID Pelanggan:")
 
-    elif text == "📋 List Data":
-        cursor.execute("SELECT nama, id_pelanggan FROM pelanggan")
-        data = cursor.fetchall()
-
-        hasil = "\n".join([f"{d[1]} - {d[0]}" for d in data])
-        update.message.reply_text(hasil if hasil else "Data kosong")
-
+# HANDLE INPUT USER
 def handle_text(update: Update, context: CallbackContext):
     user_id = update.message.from_user.id
     text = update.message.text
@@ -65,31 +81,39 @@ def handle_text(update: Update, context: CallbackContext):
     elif state == "id":
         context.user_data["id"] = text
         user_state[user_id] = "sn"
-        update.message.reply_text("Masukkan SN Modem:")
+        update.message.reply_text("Masukkan Serial Number Modem:")
 
     elif state == "sn":
         data = context.user_data
 
         cursor.execute(
-            "INSERT INTO pelanggan (nama, id_pelanggan, sn_modem) VALUES (%s, %s, %s)",
+            "INSERT INTO pelanggan (nama, id_pelanggan, sn_modem) VALUES (?, ?, ?)",
             (data["nama"], data["id"], text)
         )
         conn.commit()
 
         update.message.reply_text("✅ Data berhasil disimpan")
+
         user_state.pop(user_id)
+        context.user_data.clear()
 
     elif state == "cek":
-        cursor.execute("SELECT * FROM pelanggan WHERE id_pelanggan=%s", (text,))
+        cursor.execute(
+            "SELECT nama, id_pelanggan, sn_modem FROM pelanggan WHERE id_pelanggan=?",
+            (text,)
+        )
         data = cursor.fetchone()
 
         if data:
-            update.message.reply_text(f"Nama: {data[1]}\nSN: {data[3]}")
+            update.message.reply_text(
+                f"👤 Nama: {data[0]}\n🆔 ID: {data[1]}\n📡 SN: {data[2]}"
+            )
         else:
             update.message.reply_text("❌ Data tidak ditemukan")
 
         user_state.pop(user_id)
 
+# MAIN
 def main():
     updater = Updater(TOKEN, use_context=True)
     dp = updater.dispatcher
