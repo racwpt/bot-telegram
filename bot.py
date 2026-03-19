@@ -2,7 +2,8 @@ import sqlite3
 from telegram import Update
 from telegram.ext import Updater, CommandHandler, CallbackContext
 
-TOKEN = "8753247084:AAGuH86dlvnYRNRCI-uHqethhXGVJu3mpO0"
+import os
+TOKEN = os.environ.get("TOKEN")
 
 conn = sqlite3.connect("pelanggan.db", check_same_thread=False)
 cursor = conn.cursor()
