@@ -36,14 +36,15 @@ def start(update: Update, context: CallbackContext):
         reply_markup=ReplyKeyboardMarkup(menu, resize_keyboard=True)
     )
 
-# HANDLE MENU
-def handle_menu(update: Update, context: CallbackContext):
+def handle_all(update: Update, context: CallbackContext):
     text = update.message.text
     user_id = update.message.from_user.id
 
+    # ===== MENU =====
     if text == "➕ Tambah Data":
         user_state[user_id] = "nama"
         update.message.reply_text("Masukkan Nama Pelanggan:")
+        return
 
     elif text == "📋 Data Pelanggan":
         cursor.execute("SELECT nama, id_pelanggan, sn_modem FROM pelanggan")
@@ -55,19 +56,17 @@ def handle_menu(update: Update, context: CallbackContext):
 
         hasil = "📋 DATA PELANGGAN:\n\n"
         for d in data:
-            hasil += f"👤 Nama: {d[0]}\n🆔 ID: {d[1]}\n📡 SN: {d[2]}\n\n"
+            hasil += f"👤 {d[0]}\n🆔 {d[1]}\n📡 {d[2]}\n\n"
 
         update.message.reply_text(hasil)
+        return
 
     elif text == "🔍 Cek Pelanggan":
         user_state[user_id] = "cek"
         update.message.reply_text("Masukkan ID Pelanggan:")
+        return
 
-# HANDLE INPUT USER
-def handle_text(update: Update, context: CallbackContext):
-    user_id = update.message.from_user.id
-    text = update.message.text
-
+    # ===== INPUT STEP =====
     if user_id not in user_state:
         return
 
@@ -77,12 +76,12 @@ def handle_text(update: Update, context: CallbackContext):
         context.user_data["nama"] = text
         user_state[user_id] = "id"
         update.message.reply_text("Masukkan ID Pelanggan:")
-
+    
     elif state == "id":
         context.user_data["id"] = text
         user_state[user_id] = "sn"
         update.message.reply_text("Masukkan Serial Number Modem:")
-
+    
     elif state == "sn":
         data = context.user_data
 
@@ -112,15 +111,14 @@ def handle_text(update: Update, context: CallbackContext):
             update.message.reply_text("❌ Data tidak ditemukan")
 
         user_state.pop(user_id)
-
 # MAIN
 def main():
     updater = Updater(TOKEN, use_context=True)
     dp = updater.dispatcher
 
     dp.add_handler(CommandHandler("start", start))
-    dp.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_menu))
-    dp.add_handler(MessageHandler(Filters.text, handle_text))
+    dp.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_all))
+
 
     updater.start_polling()
     updater.idle()
