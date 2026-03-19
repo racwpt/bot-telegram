@@ -1,11 +1,12 @@
 import sqlite3
 import os
+import pandas as pd
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
 
 TOKEN = os.environ.get("TOKEN")
 
-# DATABASE
+# ================= DATABASE =================
 conn = sqlite3.connect("pelanggan.db", check_same_thread=False)
 cursor = conn.cursor()
 
@@ -23,23 +24,25 @@ CREATE TABLE IF NOT EXISTS pelanggan (
 """)
 conn.commit()
 
-# STATE
+# ================= STATE =================
 user_state = {}
 
-# MENU
+# ================= MENU =================
 menu = [
     ["➕ Tambah Data"],
-    ["🔍 Cek Pelanggan"]
+    ["🔍 Cek Pelanggan"],
+    ["📋 Data Pelanggan"],
+    ["📥 Export Excel"]
 ]
 
-# START
+# ================= START =================
 def start(update: Update, context: CallbackContext):
     update.message.reply_text(
         "📡 BOT MONITORING PELANGGAN\n\nSilakan pilih menu:",
         reply_markup=ReplyKeyboardMarkup(menu, resize_keyboard=True)
     )
 
-# HANDLE SEMUA
+# ================= HANDLE =================
 def handle_all(update: Update, context: CallbackContext):
     user_id = update.message.from_user.id
     text = update.message.text
@@ -53,6 +56,36 @@ def handle_all(update: Update, context: CallbackContext):
     elif text == "🔍 Cek Pelanggan":
         user_state[user_id] = "cek"
         update.message.reply_text("Masukkan ID Pelanggan:")
+        return
+
+    elif text == "📋 Data Pelanggan":
+        cursor.execute("SELECT nama, id_pelanggan, sn_modem, odc, odp FROM pelanggan")
+        data = cursor.fetchall()
+
+        if not data:
+            update.message.reply_text("❌ Data kosong")
+            return
+
+        hasil = "📋 DATA PELANGGAN:\n\n"
+        for d in data:
+            hasil += (
+                f"👤 {d[0]}\n"
+                f"🆔 {d[1]}\n"
+                f"📡 {d[2]}\n"
+                f"📍 ODC: {d[3]}\n"
+                f"📍 ODP: {d[4]}\n\n"
+            )
+
+        update.message.reply_text(hasil)
+        return
+
+    elif text == "📥 Export Excel":
+        df = pd.read_sql_query("SELECT * FROM pelanggan", conn)
+
+        file_name = "data_pelanggan.xlsx"
+        df.to_excel(file_name, index=False)
+
+        update.message.reply_document(open(file_name, "rb"))
         return
 
     # ===== HANDLE LOKASI =====
@@ -139,7 +172,7 @@ def handle_all(update: Update, context: CallbackContext):
 
         user_state.pop(user_id)
 
-# MAIN
+# ================= MAIN =================
 def main():
     updater = Updater(TOKEN, use_context=True)
     dp = updater.dispatcher
