@@ -14,16 +14,6 @@ def index():
 from flask import send_file
 import pandas as pd
 
-@app.route("/export")
-def export():
-    conn = get_db()  # atau psycopg2 kalau pakai PostgreSQL
-
-    df = pd.read_sql("SELECT * FROM pelanggan", conn)
-
-    file_path = "data_pelanggan.xlsx"
-    df.to_excel(file_path, index=False)
-
-    return send_file(file_path, as_attachment=True)
 
 import os
 
