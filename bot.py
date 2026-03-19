@@ -1,11 +1,11 @@
 import sqlite3
 import os
-from telegram import Update, ReplyKeyboardMarkup
+from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
 
 TOKEN = os.environ.get("TOKEN")
 
-# DATABASE SQLITE
+# DATABASE
 conn = sqlite3.connect("pelanggan.db", check_same_thread=False)
 cursor = conn.cursor()
 
@@ -14,18 +14,21 @@ CREATE TABLE IF NOT EXISTS pelanggan (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     nama TEXT,
     id_pelanggan TEXT,
-    sn_modem TEXT
+    sn_modem TEXT,
+    odc TEXT,
+    odp TEXT,
+    latitude TEXT,
+    longitude TEXT
 )
 """)
 conn.commit()
 
-# STATE USER
+# STATE
 user_state = {}
 
-# MENU BUTTON
+# MENU
 menu = [
     ["➕ Tambah Data"],
-    ["📋 Data Pelanggan"],
     ["🔍 Cek Pelanggan"]
 ]
 
@@ -36,9 +39,10 @@ def start(update: Update, context: CallbackContext):
         reply_markup=ReplyKeyboardMarkup(menu, resize_keyboard=True)
     )
 
+# HANDLE SEMUA
 def handle_all(update: Update, context: CallbackContext):
-    text = update.message.text
     user_id = update.message.from_user.id
+    text = update.message.text
 
     # ===== MENU =====
     if text == "➕ Tambah Data":
@@ -46,24 +50,32 @@ def handle_all(update: Update, context: CallbackContext):
         update.message.reply_text("Masukkan Nama Pelanggan:")
         return
 
-    elif text == "📋 Data Pelanggan":
-        cursor.execute("SELECT nama, id_pelanggan, sn_modem FROM pelanggan")
-        data = cursor.fetchall()
-
-        if not data:
-            update.message.reply_text("❌ Data masih kosong")
-            return
-
-        hasil = "📋 DATA PELANGGAN:\n\n"
-        for d in data:
-            hasil += f"👤 {d[0]}\n🆔 {d[1]}\n📡 {d[2]}\n\n"
-
-        update.message.reply_text(hasil)
-        return
-
     elif text == "🔍 Cek Pelanggan":
         user_state[user_id] = "cek"
         update.message.reply_text("Masukkan ID Pelanggan:")
+        return
+
+    # ===== HANDLE LOKASI =====
+    if update.message.location:
+        if user_id in user_state and user_state[user_id] == "lokasi":
+            lat = update.message.location.latitude
+            lon = update.message.location.longitude
+
+            data = context.user_data
+
+            cursor.execute(
+                "INSERT INTO pelanggan (nama, id_pelanggan, sn_modem, odc, odp, latitude, longitude) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (data["nama"], data["id"], data["sn"], data["odc"], data["odp"], lat, lon)
+            )
+            conn.commit()
+
+            update.message.reply_text(
+                "✅ Data + lokasi berhasil disimpan",
+                reply_markup=ReplyKeyboardMarkup(menu, resize_keyboard=True)
+            )
+
+            user_state.pop(user_id)
+            context.user_data.clear()
         return
 
     # ===== INPUT STEP =====
@@ -76,49 +88,64 @@ def handle_all(update: Update, context: CallbackContext):
         context.user_data["nama"] = text
         user_state[user_id] = "id"
         update.message.reply_text("Masukkan ID Pelanggan:")
-    
+
     elif state == "id":
         context.user_data["id"] = text
         user_state[user_id] = "sn"
         update.message.reply_text("Masukkan Serial Number Modem:")
-    
+
     elif state == "sn":
-        data = context.user_data
+        context.user_data["sn"] = text
+        user_state[user_id] = "odc"
+        update.message.reply_text("Masukkan ODC:")
 
-        cursor.execute(
-            "INSERT INTO pelanggan (nama, id_pelanggan, sn_modem) VALUES (?, ?, ?)",
-            (data["nama"], data["id"], text)
+    elif state == "odc":
+        context.user_data["odc"] = text
+        user_state[user_id] = "odp"
+        update.message.reply_text("Masukkan ID ODP:")
+
+    elif state == "odp":
+        context.user_data["odp"] = text
+        user_state[user_id] = "lokasi"
+
+        lokasi_button = [[KeyboardButton("📍 Share Lokasi", request_location=True)]]
+
+        update.message.reply_text(
+            "📍 Silakan kirim lokasi pemasangan:",
+            reply_markup=ReplyKeyboardMarkup(lokasi_button, resize_keyboard=True)
         )
-        conn.commit()
-
-        update.message.reply_text("✅ Data berhasil disimpan")
-
-        user_state.pop(user_id)
-        context.user_data.clear()
 
     elif state == "cek":
         cursor.execute(
-            "SELECT nama, id_pelanggan, sn_modem FROM pelanggan WHERE id_pelanggan=?",
+            "SELECT nama, id_pelanggan, sn_modem, odc, odp, latitude, longitude FROM pelanggan WHERE id_pelanggan=?",
             (text,)
         )
         data = cursor.fetchone()
 
         if data:
+            maps = f"https://maps.google.com/?q={data[5]},{data[6]}"
+
             update.message.reply_text(
-                f"👤 Nama: {data[0]}\n🆔 ID: {data[1]}\n📡 SN: {data[2]}"
+                f"👤 Nama: {data[0]}\n"
+                f"🆔 ID: {data[1]}\n"
+                f"📡 SN: {data[2]}\n"
+                f"📍 ODC: {data[3]}\n"
+                f"📍 ODP: {data[4]}\n"
+                f"🗺️ Lokasi: {maps}",
+                reply_markup=ReplyKeyboardMarkup(menu, resize_keyboard=True)
             )
         else:
             update.message.reply_text("❌ Data tidak ditemukan")
 
         user_state.pop(user_id)
+
 # MAIN
 def main():
     updater = Updater(TOKEN, use_context=True)
     dp = updater.dispatcher
 
     dp.add_handler(CommandHandler("start", start))
-    dp.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_all))
-
+    dp.add_handler(MessageHandler(Filters.text | Filters.location, handle_all))
 
     updater.start_polling()
     updater.idle()
