@@ -45,7 +45,7 @@ def cek(update: Update, context: CallbackContext):
         update.message.reply_text("Tidak ditemukan")
 
 def main():
-    updater = Updater(TOKEN)
+    updater = Updater(TOKEN, use_context=True)
     dp = updater.dispatcher
 
     dp.add_handler(CommandHandler("start", start))
@@ -55,4 +55,5 @@ def main():
     updater.start_polling()
     updater.idle()
 
-main()
+if __name__ == "__main__":
+    main()
