@@ -1,12 +1,12 @@
 import os
-import psycopg2
+import sqlite3
 from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
 
 TOKEN = os.environ.get("TOKEN")
 DATABASE_URL = os.environ.get("DATABASE_URL")
 
-conn = psycopg2.connect(DATABASE_URL)
+conn = sqlite3.connect("pelanggan.db", check_same_thread=False)
 cursor = conn.cursor()
 
 cursor.execute("""
